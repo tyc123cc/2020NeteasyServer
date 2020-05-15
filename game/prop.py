@@ -1,3 +1,3 @@
 class Prop:
-    def __init__(self):
-        pass
+    def __init__(self,pos):
+        self.pos = pos
