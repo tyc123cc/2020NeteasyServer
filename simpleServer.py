@@ -161,6 +161,7 @@ class SimpleServer(object):
         if runGame.ready:
             runGame.sendAllPlayerWithPlayerMsg()
             runGame.sendAllPlayerWithEnemyMsg()
+            runGame.sendAllPlayerWithPropMsg()
         else:
             runGame.sendAllPlayerWithPlayerProcess()
 
@@ -199,6 +200,12 @@ class SimpleServer(object):
             self.__dealGameMSG_Update_ChangeAttack(runGame, msg)
         elif type == conf.MSG_GAME_UPDATE_DAMAGE:
             self.__dealGameMSG_Update_Damage(runGame,msg)
+        elif type == conf.MSG_GAME_UPDATE_PROP:
+            self.__dealGameMSG_Update_Prop(runGame,msg)
+
+    def __dealGameMSG_Update_Prop(self,runGame,msg):
+        username,propID = self.parse.parseGame_Update_Prop(msg)
+        runGame.pickupProp(username,propID)
 
     def __dealGameMSG_Update_Damage(self,runGame,msg):
         enemyID,damage = self.parse.parseGame_Update_Damage(msg)

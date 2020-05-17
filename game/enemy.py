@@ -17,8 +17,12 @@ class Enemy:
         self.state = gameConf.ENEMY_STATE_IDLE
         self.attackTarget = 0
 
+        self.setProp = False;
+
     def setState(self,state):
         self.state = state
+        if state != gameConf.ENEMY_STATE_DEATH:
+            self.setProp = False
         if state == gameConf.ENEMY_STATE_ATTACK:
             t = Timer(1, self.AttackCD, ())
             t.start()

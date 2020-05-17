@@ -102,6 +102,12 @@ class Parse:
         damage = int(msg[1])
         return enemyID,damage
 
+    def parseGame_Update_Prop(self,msgs):
+        msg = msgs.split(' ')
+        username = msg[0]
+        propID = int(msg[1])
+        return username,propID
+
     def parseGame_UpdateType(self,msg):
         if msg[0] == 'M':
             return conf.MSG_GAME_UPDATE_CHANGEMOTION
@@ -113,6 +119,8 @@ class Parse:
             return conf.MSG_GAME_UPDATE_CHANGEATTACK
         elif msg[0] == 'D':
             return conf.MSG_GAME_UPDATE_DAMAGE
+        elif msg[0] == 'P':
+            return conf.MSG_GAME_UPDATE_PROP
 
 
     def parseGame_Load(self,msg):

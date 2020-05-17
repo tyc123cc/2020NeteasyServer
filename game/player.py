@@ -21,6 +21,7 @@ class Player:
         self.ready = False
         self.process = 0
 
+        self.maxHp = hp
         self.hp = hp
         self.curAmmo = 30
         self.bagAmmo = ammo - 30
@@ -35,6 +36,12 @@ class Player:
 
     def damage(self,damage):
         self.hp -= damage
+
+    def cure(self,hp,ammo):
+        self.hp += hp
+        if self.hp > self.maxHp:
+            self.hp = self.maxHp
+        self.bagAmmo += ammo
 
     def reload(self):
         if self.curAmmo + self.bagAmmo < 30:

@@ -6,6 +6,7 @@ import time
 from threading import Timer
 from navigate import Navigate
 from vector import Vector2
+from prop import Prop
 import sys
 
 
@@ -30,8 +31,20 @@ class Game:
         self.ready = False
         self.startTime = startTime
 
+        self.props = []
+        self.emptyPropsID = []
+
 
         self.enemyTime = 0
+
+    def generatePropID(self):
+        if len(self.props) == 0 and len(self.emptyPropsID) == 0:
+            return 1
+        if len(self.emptyPropsID) > 0:
+            return self.emptyPropsID.pop()
+        else:
+            return len(self.props) + 1
+
 
     def getEnemy(self,index):
         if index == 0:
@@ -62,6 +75,8 @@ class Game:
         player = self.getPlayer(username)
         player.setAttack(atk)
         if atk != gameConf.ATTACK_IDLE and atk != gameConf.ATTACK_RELOAD and atk!= gameConf.ATTACK_THROW:
+            if player.curAmmo <= 0:
+                return
             player.curAmmo -= 1
         if atk == gameConf.ATTACK_RELOAD:
             player.reload()
@@ -120,6 +135,25 @@ class Game:
             return player.back_right(delay)
         elif playerMove == gameConf.MOVE_BACK_RIGHT:
             return player.back_left(delay)
+
+    def pickupProp(self,username,propID):
+        player = self.getPlayer(username)
+        self.removeProp(propID)
+        player.cure(20,10)
+
+    def removeProp(self,propID):
+        for i in range(0,len(self.props)):
+            if self.props[i].id == propID:
+                return self.props.pop(i)
+
+    def sendAllPlayerWithPropMsg(self):
+        msg = "GP" + str(len(self.props)) + " "
+        for prop in self.props:
+            ID = prop.id
+            posx = prop.pos.x
+            posy = prop.pos.y
+            msg += str(ID) + " " + str(posx) + " " + str(posy) + " "
+        self.sendAllPlayer(msg)
 
     def sendAllPlayerWithPlayerProcess(self):
         msg = "GL" + str(len(self.players)) + " "
@@ -233,6 +267,10 @@ class Game:
                 enemy.move(time.time() - self.enemyTime)
             else:
                 enemy.setState(gameConf.ENEMY_STATE_IDLE)
+        elif enemy.state == gameConf.ENEMY_STATE_DEATH and not enemy.setProp:
+            enemy.setProp = True
+            id = self.generatePropID()
+            self.props.append(Prop(enemyPos,int(id)))
 
     def restoreMap(self):
         for p in self.players:
