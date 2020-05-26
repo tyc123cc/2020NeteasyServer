@@ -34,8 +34,21 @@ class Game:
         self.props = []
         self.emptyPropsID = []
 
+        self.deathEnemy = 0
+        self.maxEnemy = 10
 
         self.enemyTime = 0
+
+        self.gameEnd = False
+        self.dissolve = False
+
+    @staticmethod
+    def addEXP(LV,EXP,value):
+        EXP += value
+        if EXP >= 1000:
+            EXP -= 1000
+            LV+= 1
+        return (LV - 1) * 10 + 100, LV, EXP
 
     def generatePropID(self):
         if len(self.props) == 0 and len(self.emptyPropsID) == 0:
@@ -50,6 +63,19 @@ class Game:
         if index == 0:
             return None
         return self.enemies[index - 1]
+
+    def damageEnemy(self,EnemyID,damage):
+        enemy = self.getEnemy(EnemyID)
+        if enemy:
+            if enemy.state != gameConf.ENEMY_STATE_DEATH:
+                enemy.damage(damage)
+                if enemy.state == gameConf.ENEMY_STATE_DEATH:
+                    self.deathEnemy += 1
+                    if self.deathEnemy >= self.maxEnemy:
+                        self.endGame()
+
+    def endGame(self):
+        self.gameEnd = True
 
     def getPlayer(self,arg):
         for player in self.players:
@@ -173,7 +199,10 @@ class Game:
             rot = player.rotation.y
             look = player.lookupPos.y
             motion = player.motion
-            move = player.move
+            if motion == gameConf.MOTION_DEATH:
+                move = int(player.resurgenceTime)
+            else:
+                move = player.move
             attack = player.attack
             HP = player.hp
             curAmmo = player.curAmmo
@@ -196,6 +225,7 @@ class Game:
             attackTarget = enemy.attackTarget
             msg += str(id) + " " + str(hp) + " " + str(pos.x) + " " + str(pos.y) + " " + str(nextPos.x) + " " + \
                 str(nextPos.y) + " " + str(state) + " " + str(attackTarget) + " "
+        msg += str(self.deathEnemy) + " " + str(self.maxEnemy)
         self.sendAllPlayer(msg)
 
     def sendAllPlayer(self,msg):
@@ -203,9 +233,17 @@ class Game:
             if not player.user.lost:
                 self.host.sendClient(player.user.hid,msg)
 
+    def sendPlayer(self,username,msg):
+        for player in self.players:
+            if player.username == username:
+                self.host.sendClient(player.user.hid,msg)
+                return
+
     # 每隔一段时间根据角色状态对角色进行位移
     def __playerMove(self,player):
-        if player.move == gameConf.MOVE_IDLE:
+        if player.motion == gameConf.MOTION_DEATH:
+            player.resurgence()
+        elif player.move == gameConf.MOVE_IDLE:
             player.idle()
         elif player.move == gameConf.MOVE_RUN:
             player.run()
@@ -247,6 +285,8 @@ class Game:
             minNodeNum = sys.maxint
             minPath = []
             for player in self.players:
+                if player.motion == gameConf.MOTION_DEATH:
+                    continue
                 playerPos = Vector2(player.pos.x,player.pos.z)
                 if Vector2.distance(enemyPos,playerPos) <= enemy.range:
                     enemy.setState(gameConf.ENEMY_STATE_ATTACK)

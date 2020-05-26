@@ -148,3 +148,7 @@ class Sql(object):
             return True
         else:
             return False
+
+if __name__ == '__main__':
+    sql = Sql()
+    print sql.update('wy123',100,100,1,0)

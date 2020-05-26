@@ -159,7 +159,7 @@ class NetStream(object):
 				self.errc = code
 				self.lost = True
 				self.close()
-				print "发送出错，一个客户端断开连接：", self.hid
+				print "Send Error,Client Lost：", self.hid
 
 				return -1
 
@@ -200,7 +200,7 @@ class NetStream(object):
 					self.errc = code
 					self.lost = True
 					self.close()
-					print "接受出错，一个客户端断开连接：",self.hid
+					print "Receive Error,Client Lost：",self.hid
 					return -1
 			if text == '':
 				break

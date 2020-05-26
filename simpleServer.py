@@ -1,29 +1,31 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os
 
-sys.path.append('./common')
-sys.path.append('./sql')
-sys.path.append('./common_server')
-sys.path.append('./network')
-sys.path.append('./lobby')
-sys.path.append('./game')
+curPath = os.path.abspath(os.path.dirname(__file__))
+sys.path.append(curPath + '/common')
+sys.path.append(curPath + '/sql')
+sys.path.append(curPath + '/common_server')
+sys.path.append(curPath + '/network')
+sys.path.append(curPath + '/lobby')
+sys.path.append(curPath + '/game')
 
 from network.simpleHost import SimpleHost
 from dispatcher import Dispatcher
 from sql import Sql
 import conf
 from parse import Parse
-import time
 from lobby.lobby import Lobby
 from game.game import Game
 from game.player import Player
 from game.vector import *
 from multiprocessing import Process,Queue
 import gameConf
-import thread
+from threading import Timer
 import time
 import datetime
+from IPParse import IPParse
 
 
 class SimpleServer(object):
@@ -47,8 +49,8 @@ class SimpleServer(object):
 
         return
 
-    def connect(self, port):
-        self.host.startup(port)
+    def connect(self, port,IP):
+        self.host.startup(port,IP)
 
     def __dealMsg(self, clientID, msg):
         msgType = self.parse.parseType(msg)
@@ -103,7 +105,7 @@ class SimpleServer(object):
             return
         hasUser = False
         for client in self.host.clients:
-            if client.username == username:
+            if client and client.username == username:
                 self.__dealReconnect_DataMigrate(client, user, username)
                 hasUser = True
         if not hasUser:
@@ -113,6 +115,9 @@ class SimpleServer(object):
     def __dealReconnect_DataMigrate(self, oldClient, newClient, username):
         if oldClient.userState != conf.USER_STATE_GAME:
             # 用户断线前不在游戏，直接让用户进入大厅
+            self.__reconnect_Relax(newClient.hid, username)
+        else:
+            # 用户断线前在游戏中（暂时让用户重新进入大厅，不进行重连处理）
             self.__reconnect_Relax(newClient.hid, username)
 
     # 用户断线前不在游戏中，直接让用户进入大厅
@@ -154,8 +159,43 @@ class SimpleServer(object):
 
     def tickGame(self):
         for roomIndex in self.runGame.keys():
-            self.gaming(self.runGame[roomIndex])
-            self.sending(self.runGame[roomIndex])
+            if not self.runGame[roomIndex].gameEnd:
+                self.gaming(self.runGame[roomIndex])
+                self.sending(self.runGame[roomIndex])
+            else:
+                self.gameEnd(self.runGame[roomIndex],roomIndex)
+
+    def gameEnd(self,runGame,roomIndex):
+        roomID = runGame.roomID
+        dissolve = True
+        while len(self.gameMsg[roomID]) > 0:
+            msg = self.gameMsg[roomID][0]
+            self.__dealGameMsg(runGame, msg)
+            self.gameMsg[roomID].remove(msg)
+        for player in runGame.players:
+            if not player.quit and not player.feedback:
+                if runGame.deathEnemy >= runGame.maxEnemy:
+                    upexp = 500 - player.deathNum * 100
+                    if upexp < 0:
+                        upexp = 0
+                    HP, LV, EXP = Game.addEXP(player.lv, player.exp, upexp)
+                    self.sql.update(player.username,HP,100,LV,EXP)
+                    player.lv = LV
+                    player.exp = EXP
+                player.quit = True
+            elif player.quit and not player.feedback:
+                message = "GD" + str(player.lv) + " " + str(player.exp)
+                runGame.sendPlayer(player.username,message)
+            else:
+                player.quit = True
+        for player in runGame.players:
+            if not player.feedback:
+                dissolve = False
+        if dissolve:
+            runGame.dissolve = True
+            self.runGame.pop(runGame.roomID)
+            self.lobby.dissolve(runGame.roomID)
+            self.gameMsg.pop(runGame.roomID)
 
     def sending(self, runGame):
         if runGame.ready:
@@ -165,11 +205,16 @@ class SimpleServer(object):
         else:
             runGame.sendAllPlayerWithPlayerProcess()
 
-    def __dealGame(self, clinetID, msg):
+    def __dealGame(self, clientID, msg):
         temp = msg.split(' ')
         roomID = int(temp[0])
         msg = msg[len(temp[0]) + 1:]
-        self.gameMsg[roomID].append(msg)
+        if self.gameMsg.has_key(roomID):
+            self.gameMsg[roomID].append(msg)
+        else:
+            message = 'GB' + str(0) + ' ' + str(0) \
+                      + ' ' + str(0) + ' ' + str(0) + ' ' + str(0) + ' ' + str(0)
+            self.host.sendClient(clientID,message)
 
     def gaming(self, runGame):
         runGame.process()
@@ -202,6 +247,38 @@ class SimpleServer(object):
             self.__dealGameMSG_Update_Damage(runGame,msg)
         elif type == conf.MSG_GAME_UPDATE_PROP:
             self.__dealGameMSG_Update_Prop(runGame,msg)
+        elif type == conf.MSG_GAME_UPDATE_BACK:
+            self.__dealGameMSG_Update_Back(runGame,msg)
+
+    def __dealGameMSG_Update_Back(self,runGame,msg):
+        username = self.parse.parseGame_Update_Back(msg)
+        player = runGame.getPlayer(username)
+        player.feedback = True
+        clientMsg = self.sql.getUserMsg(username)
+        userID = clientMsg[0]
+        HP = clientMsg[1]
+        ammo = clientMsg[2]
+        LV = clientMsg[3]
+        EXP = clientMsg[4]
+        # 向客户端发送用户数据
+        message = 'GB' + str(userID) + ' ' + str(username) \
+                             + ' ' + str(HP) + ' ' + str(ammo) + ' ' + str(LV) + ' ' + str(EXP)
+        runGame.sendPlayer(username,message)
+        #print("send1")
+        # 将用户信息添加到服务端上
+        res, user = self.host.getClient(player.user.hid)
+        if res != 0:
+            return
+        user.userID = userID
+        user.username = str(username)
+        user.userState = conf.USER_STATE_LOBBY
+        dissolve = True
+        for player in runGame.players:
+            if not player.feedback:
+                dissolve = False
+        if dissolve:
+            if not runGame.gameEnd:
+                runGame.gameEnd = True
 
     def __dealGameMSG_Update_Prop(self,runGame,msg):
         username,propID = self.parse.parseGame_Update_Prop(msg)
@@ -217,9 +294,7 @@ class SimpleServer(object):
         runGame.changeAtk(username,attack)
         playerID = runGame.getPlayer(username).userID
         if isHit:
-            enemy = runGame.getEnemy(hitTarget)
-            if enemy:
-                enemy.damage(20)
+            runGame.damageEnemy(hitTarget,20)
             message = "GA" + str(playerID) + " " + str(pos.x) + " " + str(pos.y) + " " + str(pos.z) + \
                       " " + str(hitTarget)
             runGame.sendAllPlayer(message)
@@ -456,8 +531,6 @@ class SimpleServer(object):
             user.userID = userID
             user.username = str(username)
             user.userState = conf.USER_STATE_LOBBY
-
-
         else:
             # 向客户端反馈登录失败
             self.host.sendClient(clientID, 'LFAIL')
@@ -469,7 +542,7 @@ class SimpleServer(object):
             if self.host.clients[pos] and self.host.clients[pos].hid == client.hid:
                 self.host.clients[pos] = None
                 client.close()
-                print "断开连接", client.hid
+                print "lost connect", client.hid
                 del client
                 self.host.count -= 1
                 return
@@ -487,12 +560,13 @@ class SimpleServer(object):
                     if msg == conf.MSG_UNMEANING:
                         # 收到无意义信息 忽视
                         continue
+                    #print msg
                     self.__dealMsg(clientID, msg)
             elif eventType == conf.NET_CONNECTION_LEAVE:
                 # 用户断线
                 res, client = self.host.getClient(clientID)
                 if res != 0:
-                    return
+                    continue
                 pos = int(clientMsg)
                 if client.userState == conf.USER_STATE_ROOM:
                     # 用户掉线前若在房间内，则退出房间
@@ -500,26 +574,19 @@ class SimpleServer(object):
                     self.lobby.quitRoom(roomID, client.userID_Room)
                     self.__sendRoomMsg(roomID)
                 elif client.userState == conf.USER_STATE_GAME:
-                    # 用户掉线前在游戏中，则将用户标记为离线状态，不进行清理
+                    # 用户掉线前在游戏中，则将用户标记为退出状态
                     client.lost = True
-                    return
+                    self.runGame[client.room].getPlayer(client.username).feedback = True
                 self.__clearClient(client)
         self.tickGame()
 
         return
 
-
-def checkConnect(host):
-    pass
-    # t = time.time()
-    # while 1:
-    #    print(time.time() - t)
-    #    time.sleep(0.001)
-
-
-server = SimpleServer()
-server.connect(12345)
-thread.start_new_thread(checkConnect, (server.host,))
-while (1):
-    server.tick()
-    time.sleep(0.1)
+if __name__ == "__main__":
+    server = SimpleServer()
+    parse = IPParse('ConnectConf.xml')
+    IP,port = parse.getIPandPort()
+    server.connect(port,IP)
+    while (1):
+        server.tick()
+        time.sleep(0.1)

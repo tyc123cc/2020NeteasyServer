@@ -43,3 +43,19 @@ class Lobby:
         if room.nowUserNum == 0:
             self.bufferRooms.append(roomID)
             self.rooms.pop(roomID)
+
+    def dissolve(self,roomID):
+        room = self.getRoom(roomID)
+        if room == -1:
+            return
+        while(len(room.users) > 0):
+            self.quitRoom(roomID,1)
+
+if __name__ == '__main__':
+    lobby = Lobby()
+    room = lobby.createRoom()
+    room.limitUserNum = 2
+    room.houseOwner = 1
+
+    lobby.dissolve(1)
+    print lobby.getRoom(1)

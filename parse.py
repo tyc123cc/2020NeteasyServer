@@ -108,6 +108,11 @@ class Parse:
         propID = int(msg[1])
         return username,propID
 
+    def parseGame_Update_Back(self,msgs):
+        msg = msgs.split(' ')
+        username = msg[0]
+        return username
+
     def parseGame_UpdateType(self,msg):
         if msg[0] == 'M':
             return conf.MSG_GAME_UPDATE_CHANGEMOTION
@@ -121,6 +126,8 @@ class Parse:
             return conf.MSG_GAME_UPDATE_DAMAGE
         elif msg[0] == 'P':
             return conf.MSG_GAME_UPDATE_PROP
+        elif msg[0] == 'B':
+            return conf.MSG_GAME_UPDATE_BACK
 
 
     def parseGame_Load(self,msg):

@@ -1,0 +1,6 @@
+<collection shelf="ConnectConf">
+  <connect>
+    <IP>127.0.0.1</IP>
+    <port>12345</port>
+  </connect>
+</collection>

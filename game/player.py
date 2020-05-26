@@ -32,10 +32,32 @@ class Player:
         self.move = gameConf.MOVE_IDLE
         self.attack = gameConf.ATTACK_IDLE
 
+        self.deathNum = 0
+        self.resurgenceSetTime = 10
+        self.resurgenceTime = 10
+        self.resurgenceLastTime = 0
+
         self.singleTime = 0
+
+        self.quit = False
+        self.feedback = False
+
+    def resurgence(self):
+        elapseTime = time.time() - self.resurgenceLastTime
+        self.resurgenceLastTime = time.time()
+        self.resurgenceTime -= elapseTime
+        if self.resurgenceTime <= 0:
+            self.hp = 0
+            self.cure(self.maxHp,0)
+            self.setMotion(gameConf.MOTION_WALK,0,True)
+            self.setMove(gameConf.MOVE_IDLE,0)
+            self.setAttack(gameConf.ATTACK_IDLE)
 
     def damage(self,damage):
         self.hp -= damage
+        if self.hp <= 0 and self.motion != gameConf.MOTION_DEATH:
+            self.deathNum += 1
+            self.setMotion(gameConf.MOTION_DEATH,0)
 
     def cure(self,hp,ammo):
         self.hp += hp
@@ -52,11 +74,15 @@ class Player:
             self.curAmmo = 30
 
     def setAttack(self,attack):
+        if self.motion == gameConf.MOTION_DEATH:
+            return
         self.attack = attack
         if attack == gameConf.ATTACK_SINGLE:
             self.singleTime = time.time()
 
-    def setMotion(self,motion,delay):
+    def setMotion(self,motion,delay,force = False):
+        if self.motion == gameConf.MOTION_DEATH and not force:
+            return
         self.motion = motion
         pos = self.pos
         move = self.move
@@ -66,6 +92,10 @@ class Player:
             self.speed = gameConf.SPEED_WALK
         elif motion == gameConf.MOTION_CROUCH:
             self.speed = gameConf.SPEED_CROUCH
+        elif motion == gameConf.MOTION_DEATH:
+            self.resurgenceLastTime = time.time()
+            self.resurgenceTime = self.resurgenceSetTime
+            return
         if move == gameConf.MOVE_RUN:
             pos = self.run(delay)
         elif move == gameConf.MOVE_BACK:
@@ -86,6 +116,8 @@ class Player:
 
 
     def setMove(self,move,delay):
+        if self.motion == gameConf.MOTION_DEATH:
+            return self.pos
         self.move = move
         pos = self.pos
         if move == gameConf.MOVE_RUN:

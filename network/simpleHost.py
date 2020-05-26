@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import sys
-sys.path.append('../common')
+import os
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append(rootPath + '/common')
+sys.path.append(curPath)
 
 import time
 import conf
@@ -79,13 +83,13 @@ class SimpleHost(object):
 		return
 
 	# start listenning
-	def startup(self, port = 0):
+	def startup(self, port = 0,IP = '127.0.0.1'):
 		self.shutdown()
 
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		try: 
-			self.sock.bind((socket.gethostname(), port))
+			self.sock.bind((IP, port))
 		except: 
 			try: 
 				self.sock.close()
@@ -97,7 +101,7 @@ class SimpleHost(object):
 		self.sock.setblocking(0)
 		self.port = self.sock.getsockname()[1]
 		self.state = conf.NET_STATE_ESTABLISHED
-		print("服务器开始运行")
+		print "Server Start"
 		return 0
 
 	def getClient(self, hid):
@@ -125,7 +129,7 @@ class SimpleHost(object):
 	# send data to a certain client
 	def sendClient(self, hid, data):
 		code, client = self.getClient(hid)
-		if client.lost:
+		if not client or client.lost:
 			return -1;
 		if code < 0:
 			return code
@@ -182,7 +186,7 @@ class SimpleHost(object):
 		self.clients[pos] = client
 		self.count += 1
 		self.queue.append((conf.NET_CONNECTION_NEW, hid, repr(client.peername)))
-		print "新的客户端连接:",hid
+		print "New client connect:",hid
 		return
 
 	def updateClients(self, current):
